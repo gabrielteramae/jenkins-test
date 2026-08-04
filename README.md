@@ -1,4 +1,4 @@
-# Task API
+# Testando Jenkins
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
@@ -82,6 +82,14 @@ O `Jenkinsfile` define os seguintes estágios:
 5. Clique em **Build Now**
 
 > **Nota:** o agente Jenkins precisa ter Python 3 e Docker instalados/acessíveis para rodar todos os estágios do pipeline.
+
+---
+
+## Referências
+
+- [O que é Jenkins | Guia prático para começar com Jenkins](https://www.youtube.com/watch?v=mvtVL5eivzo) — vídeo introdutório usado como base conceitual do projeto
+- [Documentação oficial do Jenkins](https://www.jenkins.io)
+- [Repositório oficial do Jenkins no GitHub](https://github.com/jenkinsci/jenkins)
 
 ---
 © 2026 Gabriel Teramae Chan
