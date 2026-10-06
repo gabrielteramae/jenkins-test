@@ -53,16 +53,26 @@ pipeline {
         stage('Smoke test do container') {
             steps {
                 sh '''
-                    docker run -d --name task-api-smoke -p 8001:8000 ${IMAGE_NAME}:${IMAGE_TAG}
-                    sleep 3
-                    curl --fail http://localhost:8001/health
+                    NAME="task-api-smoke-${BUILD_NUMBER}"
+                    docker rm -f "$NAME" >/dev/null 2>&1 || true
+                    docker run -d --name "$NAME" -p 8001:8000 "${IMAGE_NAME}:${IMAGE_TAG}"
+                    ok=0
+                    for i in 1 2 3 4 5 6 7 8 9 10; do
+                        if curl --fail --silent http://localhost:8001/health; then
+                            ok=1
+                            break
+                        fi
+                        sleep 1
+                    done
+                    test "$ok" = 1
                 '''
             }
             post {
                 always {
                     sh '''
-                        docker stop task-api-smoke || true
-                        docker rm task-api-smoke || true
+                        NAME="task-api-smoke-${BUILD_NUMBER}"
+                        docker stop "$NAME" || true
+                        docker rm "$NAME" || true
                     '''
                 }
             }
