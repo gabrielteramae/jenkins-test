@@ -1,95 +1,81 @@
-# Testando Jenkins
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=flat&logo=fastapi&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
-![Jenkins](https://img.shields.io/badge/Jenkins-D24939?style=flat&logo=jenkins&logoColor=white)
-![Pytest](https://img.shields.io/badge/Pytest-0A9EDC?style=flat&logo=pytest&logoColor=white)
+# Task API — CRUD em memória para um pipeline Jenkins
 
-API REST CRUD para gerenciamento de tarefas, com pipeline de CI/CD completo em Jenkins.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115.0-009688?logo=fastapi&logoColor=white)
+![Pytest](https://img.shields.io/badge/pytest-8.3.3-0A9EDC?logo=pytest&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Jenkins](https://img.shields.io/badge/Jenkins-Pipeline-D24939?logo=jenkins&logoColor=white)
 
-## Sobre
+API de tarefas cujo estado é um `dict` no processo. O ponto do repositório é o `Jenkinsfile`: venv, pytest com JUnit, build da imagem, smoke test de `/health` e um deploy que só imprime na branch `main`.
 
-Uma solução simples e bem estruturada para criar, listar, atualizar o status e excluir tarefas. O backend foi construído com **Python** e **FastAPI**, com validação de dados via **Pydantic** e cobertura de testes automatizados via **Pytest**. O projeto inclui um `Jenkinsfile` completo, cobrindo desde a instalação de dependências até o build e validação da imagem Docker.
+## Por que memória
 
-## Funcionalidades
+| Escolha | Efeito |
+| --- | --- |
+| `_tasks` em memória, id inteiro crescente | O pipeline não precisa de banco. Restart zera os dados. |
+| SQLite ou Postgres | Sobrevive a restart; o Jenkinsfile teria que subir esse serviço. Não está aqui. |
 
-- Criar tarefa
-- Listar tarefas
-- Buscar tarefa por ID
-- Atualizar status da tarefa (PENDING, IN_PROGRESS, DONE)
-- Excluir tarefa
-- Endpoint de healthcheck (`/health`) usado pelo pipeline e por monitoramento
-- Validação de entrada via Pydantic, com erros padronizados (422)
-- Documentação interativa da API com Swagger UI / OpenAPI (`/docs`)
-- Pipeline Jenkins: build → testes → imagem Docker → smoke test → deploy (branch `main`)
+O estágio "Deploy (simulado)" não envia a imagem a registry nenhum. O `post { always }` tenta `docker rmi` da tag `task-api:<BUILD_NUMBER>`.
 
 ## Stack
 
-- **Backend:** Python 3.12, FastAPI, Pydantic
-- **Testes:** Pytest, httpx (TestClient) — 8 testes cobrindo todos os endpoints
-- **Containerização:** Docker
-- **CI/CD:** Jenkins (pipeline declarativo via `Jenkinsfile`)
-- **Armazenamento:** em memória (propositalmente simples, sem banco de dados — foco do projeto é a automação em volta da API)
+- Python 3.12 (`Dockerfile`: `python:3.12-slim`)
+- FastAPI 0.115.0, Uvicorn 0.30.6, Pydantic 2.9.2
+- pytest 8.3.3 e httpx 0.27.2 (`TestClient`)
+- Docker e Jenkins Pipeline (o agente Jenkins não vem no repositório)
 
----
+## Estrutura
 
-## Como rodar localmente
+```
+app/
+├── main.py       # rotas; dict _tasks
+└── models.py     # TaskStatus: PENDING, IN_PROGRESS, DONE
+tests/
+└── test_main.py
+Dockerfile
+Jenkinsfile
+pytest.ini        # pythonpath = .
+requirements.txt
+```
 
-**Pré-requisitos:** Python 3.12+
+## Como rodar
 
-Para rodar a aplicação, execute na raiz do projeto:
 ```bash
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+git clone https://github.com/gabrielteramae/jenkins-test.git
+cd jenkins-test
+python3 -m venv venv
+. venv/bin/activate
 pip install -r requirements.txt
+pytest
 uvicorn app.main:app --reload
 ```
 
-Acesse a documentação interativa em `http://localhost:8000/docs`.
-
-## Rodando os testes
-
-```bash
-pytest
-```
-
-## Rodando com Docker
+Imagem, como o `Dockerfile` define (porta 8000):
 
 ```bash
 docker build -t task-api .
-docker run -p 8000:8000 task-api
+docker run --rm -p 8000:8000 task-api
 ```
 
----
+O pipeline espera um agente com `python3`, `pip`, `pytest`, `docker` e `curl`. O smoke sobe o container na porta 8001 do host e chama `/health`.
 
-## Pipeline Jenkins
+## Endpoints
 
-O `Jenkinsfile` define os seguintes estágios:
+| Método | Rota | Resposta |
+| --- | --- | --- |
+| GET | `/health` | `{"status":"ok"}` |
+| POST | `/tasks` | 201. `title` (1–200), `description` opcional (até 1000). Status inicial `PENDING` |
+| GET | `/tasks` | lista |
+| GET | `/tasks/{task_id}` | 404 se não existe |
+| PATCH | `/tasks/{task_id}` | só troca `status` |
+| DELETE | `/tasks/{task_id}` | 204 |
 
-1. **Checkout** — baixa o código do repositório
-2. **Instalar dependências** — cria virtualenv e instala requirements
-3. **Rodar testes** — executa Pytest e publica resultados (JUnit XML)
-4. **Build da imagem Docker** — constrói a imagem versionada pelo número do build
-5. **Smoke test do container** — sobe o container e valida o endpoint `/health`
-6. **Deploy (simulado)** — roda apenas na branch `main`
+Título vazio: 422.
 
-### Como configurar no Jenkins
+## Testes realizados
 
-1. Suba um Jenkins local (via Docker)
-2. **New Item → Pipeline**
-3. Em Pipeline, escolha **"Pipeline script from SCM"**
-4. Aponte pro repositório Git deste projeto e o caminho do `Jenkinsfile`
-5. Clique em **Build Now**
-
-> **Nota:** o agente Jenkins precisa ter Python 3 e Docker instalados/acessíveis para rodar todos os estágios do pipeline.
+`tests/test_main.py` usa `TestClient`. Antes de cada teste limpa `_tasks` (o contador `_next_id` não volta a 1). Cobre health, criação, título vazio, listagem, busca, 404, PATCH para `DONE` e DELETE. Não há teste do `Jenkinsfile` nem do container.
 
 ---
 
-## Referências
-
-- [O que é Jenkins | Guia prático para começar com Jenkins](https://www.youtube.com/watch?v=mvtVL5eivzo) — vídeo introdutório usado como base conceitual do projeto
-- [Documentação oficial do Jenkins](https://www.jenkins.io)
-- [Repositório oficial do Jenkins no GitHub](https://github.com/jenkinsci/jenkins)
-
----
 © 2026 Gabriel Teramae Chan
